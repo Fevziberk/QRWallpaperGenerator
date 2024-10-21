@@ -1,0 +1,183 @@
+﻿<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-6">
+            <h3>Fotoğraf Yükle</h3>
+            <input type="file" id="uploadImage" class="form-control mb-3" />
+            <canvas id="imageCanvas" class="border mt-3" style="width: 100%; max-width: 500px;"></canvas>
+        </div>
+
+        <div class="col-md-6">
+            <h3>QR Kod Oluştur</h3>
+            <input type="text" id="qrInput" class="form-control" placeholder="QR Kod İçeriği" />
+            <button class="btn btn-success mt-3" id="generateQR">Oluştur</button>
+
+            <div class="mt-3">
+                <label>X Konumu:</label>
+                <input type="range" id="qrPosX" min="0" max="500" value="0" class="form-range" />
+
+                <label>Y Konumu:</label>
+                <input type="range" id="qrPosY" min="0" max="500" value="0" class="form-range" />
+
+                <label>Boyut:</label>
+                <input type="range" id="qrSize" min="50" max="600" value="150" class="form-range" />
+
+                <label>Rotasyon:</label>
+                <input type="range" id="qrRotation" min="0" max="360" value="0" class="form-range" />
+            </div>
+
+            <button class="btn btn-primary mt-3" id="downloadImage" disabled>İndir</button>
+        </div>
+    </div>
+</div>
+
+
+
+<script src="~/js/qrious.min.js"></script>
+
+
+<script>
+    const canvas = document.getElementById('imageCanvas');
+    const ctx = canvas.getContext('2d');
+    const downloadButton = document.getElementById('downloadImage');
+    let img = new Image();
+    let qrImage = new Image();
+    let imgLoaded = false, qrLoaded = false;
+    let qrPosition = { x: 0, y: 0, width: 150, height: 150, rotation: 0 };
+
+    // Set the canvas size based on the image
+    document.getElementById('uploadImage').addEventListener('change', (e) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            img.src = event.target.result;
+            img.onload = () => {
+                imgLoaded = true;
+                enableDownloadButton();
+                canvas.width = img.width;
+                canvas.height = img.height;
+
+                // Set the slider based on the canvas
+                document.getElementById('qrPosX').max = canvas.width - qrPosition.width;
+                document.getElementById('qrPosY').max = canvas.height - qrPosition.height;
+
+                drawCanvas();
+            };
+        };
+        reader.readAsDataURL(e.target.files[0]);
+    });
+
+    // Generate QR
+    document.getElementById('generateQR').addEventListener('click', () => {
+        const input = document.getElementById('qrInput').value;
+
+        const qr = new QRious({
+            value: input,
+            size: qrPosition.width
+        });
+
+        qrImage.onload = () => {
+            qrLoaded = true;
+            enableDownloadButton();
+            drawCanvas();
+        };
+
+        qrImage.src = qr.toDataURL();  // Generate and add to the image
+    });
+
+
+    function drawCanvas() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        ctx.save();
+        ctx.translate(qrPosition.x + qrPosition.width / 2, qrPosition.y + qrPosition.height / 2);
+        ctx.rotate((qrPosition.rotation * Math.PI) / 180);
+        ctx.drawImage(qrImage, -qrPosition.width / 2, -qrPosition.height / 2, qrPosition.width, qrPosition.height);
+        ctx.restore();
+    }
+
+    function enableDownloadButton() {
+        if (imgLoaded && qrLoaded) {
+            downloadButton.disabled = false;
+        }
+    }
+
+    downloadButton.addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.download = 'qr_image.png';
+        link.href = canvas.toDataURL('image/png');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+
+    
+    document.getElementById('qrPosX').addEventListener('input', (e) => {
+        qrPosition.x = parseInt(e.target.value);
+        drawCanvas();
+    });
+
+    document.getElementById('qrPosY').addEventListener('input', (e) => {
+        qrPosition.y = parseInt(e.target.value);
+        drawCanvas();
+    });
+
+    document.getElementById('qrSize').addEventListener('input', (e) => {
+        const size = parseInt(e.target.value);
+        qrPosition.width = size;
+        qrPosition.height = size;
+
+        // Resize the max slider variables
+        document.getElementById('qrPosX').max = canvas.width - qrPosition.width;
+        document.getElementById('qrPosY').max = canvas.height - qrPosition.height;
+
+        drawCanvas();
+    });
+
+    document.getElementById('qrRotation').addEventListener('input', (e) => {
+        qrPosition.rotation = e.target.value;
+        drawCanvas();
+    });
+
+
+    document.getElementById('qrRotation').addEventListener('input', (e) => {
+        qrPosition.rotation = e.target.value;
+        drawCanvas();
+    });
+
+    let isDragging = false;
+    let offsetX, offsetY;
+
+    qrImage.addEventListener('mousedown', startDrag);
+    qrImage.addEventListener('mousemove', drag);
+    qrImage.addEventListener('mouseup', endDrag);
+
+    qrImage.addEventListener('touchstart', (e) => startDrag(e.touches[0]));
+    qrImage.addEventListener('touchmove', (e) => drag(e.touches[0]));
+    qrImage.addEventListener('touchend', endDrag);
+
+    function startDrag(e) {
+        isDragging = true;
+        offsetX = e.clientX - qrPosition.x;
+        offsetY = e.clientY - qrPosition.y;
+    }
+
+    function drag(e) {
+        if (!isDragging) return;
+
+        let newX = e.clientX - offsetX;
+        let newY = e.clientY - offsetY;
+
+        // Set the boundaries for dragging
+        newX = Math.max(0, Math.min(canvas.width - qrPosition.width, newX));
+        newY = Math.max(0, Math.min(canvas.height - qrPosition.height, newY));
+
+        qrPosition.x = newX;
+        qrPosition.y = newY;
+        drawCanvas();
+    }
+
+    function endDrag() {
+        isDragging = false;
+    }
+
+</script>
